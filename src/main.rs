@@ -1,31 +1,34 @@
 use std::collections::HashMap;
 use std::env;
-use std::fs;
+use std::error::Error;
+use std::fs::File;
+use std::io::{self, BufRead};
 
-fn main() {
-    let home_dir = match env::var_os("HOME") {
-        Some(home) => home,
-        None => {
-            panic!("where's the freaking $HOME");
-        }
-    };
-    let zshrc_path = home_dir.into_string().expect("some shit happened");
-    let zshrc_path = format!("{}/.zsh_history", zshrc_path);
-    let contents = fs::read_to_string(zshrc_path).expect("you are a piece of shit");
+fn main() -> Result<(), Box<dyn Error>> {
+    let home_dir = env::var("HOME")?;
 
-    let mut counter: HashMap<&str, usize> = HashMap::new();
+    let zsh_history_path = format!("{}/.zsh_history", home_dir);
 
-    for line in contents.lines() {
-        if let Some((_, cmd)) = line.split_once(";") {
-            *counter
-                .entry(cmd.split(' ').nth(0).expect("bullshit"))
-                .or_insert(0) += 1;
+    let file = File::open(&zsh_history_path)?;
+    let reader = io::BufReader::new(file);
+
+    let mut counter: HashMap<String, usize> = HashMap::new();
+
+    for line in reader.lines() {
+        if let Some((_, cmd)) = line?.split_once(';') {
+            let cmd = cmd.trim();
+            if let Some(command_name) = cmd.split(' ').nth(0) {
+                *counter.entry(command_name.to_string()).or_default() += 1;
+            }
         }
     }
-    let mut sorted_entries: Vec<_> = counter.iter().collect();
-    sorted_entries.sort_by(|(_, a), (_, b)| a.cmp(b));
 
-    for (key, value) in sorted_entries {
-        println!("{}: {}", key, value);
+    // println!("{:#?}", counter);
+    let mut sorted_entries: Vec<_> = counter.into_iter().collect();
+    sorted_entries.sort_by(|a, b| a.1.cmp(&b.1));
+
+    for (command, count) in sorted_entries {
+        println!("{}: {}", command, count);
     }
+    Ok(())
 }
